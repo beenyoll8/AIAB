@@ -1,0 +1,108 @@
+import gymnasium as gym
+import numpy as np
+import random
+
+# Example fitness function (evaluate policy in CartPole environment)
+def evaluate_policy(policy_parameters, num_episodes=10):
+    env = gym.make("CartPole-v1")
+    total_rewards = []
+    for _ in range(num_episodes):
+        observation = env.reset()
+        total_reward = 0
+        done = False
+        while not done:
+            action = cartpole_policy(observation, policy_parameters)
+            observation, reward, done, _  = env.step(action)
+            total_reward += reward
+        total_rewards.append(total_reward)
+    env.close()
+    return np.mean(total_rewards)
+
+# Tournament selection
+def tournament_selection(population, fitness_scores, tournament_size):
+    selected_indices = []
+    for _ in range(len(population) // 2):
+        tournament_indices = random.sample(range(len(population)), tournament_size)
+        winner_index = max(tournament_indices, key=lambda i: fitness_scores[i])
+        selected_indices.append(winner_index)
+    return [population[i] for i in selected_indices]
+
+# Uniform crossover
+def uniform_crossover(parent1, parent2):
+    offspring1 = np.zeros_like(parent1)
+    offspring2 = np.zeros_like(parent2)
+    for i in range(len(parent1)):
+        if random.random() < 0.5:
+            offspring1[i] = parent1[i]
+            offspring2[i] = parent2[i]
+        else:
+            offspring1[i] = parent2[i]
+            offspring2[i] = parent1[i]
+    return offspring1, offspring2
+
+# Gaussian mutation
+def gaussian_mutation(individual, mutation_rate, mutation_scale):
+    mutated_individual = individual.copy()
+    for i in range(len(mutated_individual)):
+        if random.random() < mutation_rate:
+            mutated_individual[i] += np.random.normal(scale=mutation_scale)
+    return mutated_individual
+
+# Genetic Algorithm
+def genetic_algorithm(population_size, gene_length, num_generations, tournament_size, mutation_rate, mutation_scale):
+    # Initialization
+    population = [np.random.rand(gene_length) for _ in range(population_size)]
+    best_fitness = -float('inf')
+    best_individual = None
+
+    for generation in range(num_generations):
+        # Evaluation
+        fitness_scores = [evaluate_policy(policy) for policy in population]
+
+        # Selection
+        selected_population = tournament_selection(population, fitness_scores, tournament_size)
+
+        # Crossover
+        offspring = []
+        num_parents = len(selected_population)
+        for i in range(0, num_parents, 2):
+            parent1, parent2 = selected_population[i], selected_population[(i+1) % num_parents]
+            offspring1, offspring2 = uniform_crossover(parent1, parent2)
+            offspring.append(offspring1)
+            offspring.append(offspring2)
+
+        # Mutation
+        for i, individual in enumerate(offspring):
+            offspring[i] = gaussian_mutation(individual, mutation_rate, mutation_scale)
+
+        # Replacement
+        population = offspring
+
+        # Track the best individual
+        generation_best_fitness = max(fitness_scores)
+        if generation_best_fitness > best_fitness:
+            best_fitness = generation_best_fitness
+            best_individual = population[np.argmax(fitness_scores)]
+
+    return best_individual
+
+# Define a function to implement the policy based on policy parameters
+def cartpole_policy(observation, policy_parameters):
+    # Simple linear policy: If angle > 0, move right. Otherwise, move left.
+    return int(np.dot(observation, policy_parameters) > 0)
+
+# Example parameters
+population_size = 100
+gene_length = 4  # Example: parameters for a simple policy
+num_generations = 50
+tournament_size = 5
+mutation_rate = 0.1
+mutation_scale = 0.1  # Example: scale for Gaussian mutation
+
+# Run GA
+best_policy_parameters = genetic_algorithm(population_size, gene_length, num_generations, tournament_size, mutation_rate, mutation_scale)
+
+# Evaluate the best policy in the CartPole environment
+avg_reward = evaluate_policy(best_policy_parameters)
+print("Best Policy Parameters:", best_policy_parameters)
+print("Average Episode Reward:", avg_reward)
