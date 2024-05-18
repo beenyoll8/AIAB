@@ -1,0 +1,218 @@
+class Q_Learning:
+    
+    ##########
+    
+    def __init__(self, env, alpha, gamma, epsilon, numberEpisodes, numberOfBins, lowerBounds, upperBounds):
+        
+        # Assign the CartPole environment to self.env
+        self.env = env
+        
+        # Assign the learning rate to self.alpha
+        self.alpha = alpha
+        
+        # Assign the discount rate to self.gamma
+        self.gamma = gamma
+        
+        # Assign the epsilon parameter for the epsilon-greedy strategy to self.epsilon
+        self.epsilon = epsilon
+        
+        # Get the number of possible actions from the environment (2 for CartPole: left and right)
+        self.actionNumber = env.action_space.n
+        
+        # Assign the total number of episodes to self.numberEpisodes
+        self.numberEpisodes = numberEpisodes
+        
+        # Assign the list of the number of bins for discretizing state variables to self.numberOfBins
+        self.numberOfBins = numberOfBins
+        
+        # Assign the lower bounds for state variables to self.lowerBounds
+        self.lowerBounds = lowerBounds
+        
+        # Assign the upper bounds for state variables to self.upperBounds
+        self.upperBounds = upperBounds
+
+        # Initialize an empty list to store the sum of rewards for each learning episode
+        self.sumRewardsEpisode = []
+        
+        # Initialize the Q-matrix with random values between 0 and 1
+        # The shape of the Q-matrix is determined by the number of bins for each state variable and the number of possible actions
+        self.Qmatrix = np.random.uniform(low=0, high=1, size=(numberOfBins[0], numberOfBins[1], numberOfBins[2], numberOfBins[3], self.actionNumber))
+
+    ##########
+
+    def returnIndexState(self, state):
+        # Extract state variables for readability
+        position = state[0]
+        velocity = state[1]
+        angle = state[2]
+        angularVelocity = state[3]
+        
+        # Define discretization bins for each state variable
+        cartPositionBin = np.linspace(self.lowerBounds[0], self.upperBounds[0], self.numberOfBins[0])
+        cartVelocityBin = np.linspace(self.lowerBounds[1], self.upperBounds[1], self.numberOfBins[1])
+        poleAngleBin = np.linspace(self.lowerBounds[2], self.upperBounds[2], self.numberOfBins[2])
+        poleAngularVelocityBin = np.linspace(self.lowerBounds[3], self.upperBounds[3], self.numberOfBins[3])
+        
+        # Determine the index of each state variable in its corresponding bin
+        indexPosition = np.maximum(np.digitize(position, cartPositionBin) - 1, 0)
+        indexVelocity = np.maximum(np.digitize(velocity, cartVelocityBin) - 1, 0)
+        indexAngle = np.maximum(np.digitize(angle, poleAngleBin) - 1, 0)
+        indexAngularVelocity = np.maximum(np.digitize(angularVelocity, poleAngularVelocityBin) - 1, 0)
+        
+        # Return the 4-dimensional tuple defining the indices of the QvalueMatrix
+        return tuple([indexPosition, indexVelocity, indexAngle, indexAngularVelocity])
+
+    ##########
+
+    def selectAction(self, state, index):
+        # First 500 episodes: Select completely random actions for exploration
+        if index < 500:
+            return np.random.choice(self.actionNumber)
+        
+        # Generate a random number for epsilon-greedy approach
+        randomNumber = np.random.random()
+        
+        # After 7000 episodes, start decreasing the epsilon parameter gradually
+        if index > 7000:
+            self.epsilon = 0.999 * self.epsilon
+        
+        # If the random number is less than epsilon, explore by selecting random actions
+        if randomNumber < self.epsilon:
+            return np.random.choice(self.actionNumber)
+        
+        # Otherwise, select greedy actions
+        else:
+            # Find the indices where Qmatrix[state, :] has the maximum value
+            maxIndices = np.where(self.Qmatrix[self.returnIndexState(state)] == np.max(self.Qmatrix[self.returnIndexState(state)]))[0]
+            
+            # Randomly select one of the indices (minimum index is chosen to handle ties)
+            return np.random.choice(maxIndices)
+
+    ##########
+
+    def simulateEpisodes(self):
+        
+        # Loop through the episodes
+        for indexEpisode in range(self.numberEpisodes):
+            
+            # List that stores rewards per episode - necessary for convergence tracking
+            rewardsEpisode = []
+            
+            # Reset the environment at the beginning of every episode
+            (stateS, _) = self.env.reset()
+            stateS = list(stateS)
+
+            print("Simulating episode {}".format(indexEpisode))
+
+            # Step from one state to another until a terminal state is reached
+            terminalState = False
+            while not terminalState:
+                # Get the discretized index of the state
+                stateSIndex = self.returnIndexState(stateS)
+
+                # Select an action based on the current state (epsilon-greedy)
+                actionA = self.selectAction(stateS, indexEpisode)
+
+                # Step to the next state and get reward and terminal state indicator
+                stateSprime, reward, terminalState, _, _ = self.env.step(actionA)
+
+                # Collect rewards obtained in this episode
+                rewardsEpisode.append(reward)
+
+                # Get the index of the next state
+                stateSprime = list(stateSprime)
+                stateSprimeIndex = self.returnIndexState(stateSprime)
+
+                # Compute Q-value for the next state
+                QmaxPrime = np.max(self.Qmatrix[stateSprimeIndex])
+
+                # Update Q-value for the current state-action pair
+                if not terminalState:
+                    # Update Q-value for non-terminal states
+                    error = reward + self.gamma * QmaxPrime - self.Qmatrix[stateSIndex + (actionA,)]
+                    self.Qmatrix[stateSIndex + (actionA,)] += self.alpha * error
+                else:
+                    # Update Q-value for terminal states
+                    error = reward - self.Qmatrix[stateSIndex + (actionA,)]
+                    self.Qmatrix[stateSIndex + (actionA,)] += self.alpha * error
+
+                # Move to the next state
+                stateS = stateSprime
+
+            # Print the sum of rewards obtained in this episode
+            print("Sum of rewards {}".format(np.sum(rewardsEpisode)))
+            self.sumRewardsEpisode.append(np.sum(rewardsEpisode))
+        
+    ##########
+    
+        # Simulate the final learned optimal policy
+    def simulateLearnedStrategy(self):
+        import gym 
+        import time
+
+        # Create Cart Pole environment with rendering
+        env1 = gym.make('CartPole-v1', render_mode='human')
+        currentState, _ = env1.reset()  # Initial state
+        env1.render()  # Render the environment
+
+        timeSteps = 1000  # Maximum time steps per episode
+        obtainedRewards = []  # Store rewards at each time step
+
+        # Iterate through time steps
+        for timeIndex in range(timeSteps):
+            print(timeIndex)
+
+            # Select action using greedy policy
+            actionInStateS = np.random.choice(np.where(self.Qmatrix[self.returnIndexState(currentState)] == np.max(self.Qmatrix[self.returnIndexState(currentState)]))[0])
+
+            # Take action and observe next state and reward
+            currentState, reward, terminated, _, _ = env1.step(actionInStateS)
+
+            # Collect rewards obtained in each time step
+            obtainedRewards.append(reward)
+
+            # Render the environment with a slight delay
+            time.sleep(0.05)
+
+            # Break if the episode is terminated
+            if terminated:
+                time.sleep(1)  # Delay before closing the environment
+                break
+
+        return obtainedRewards, env1
+
+    ##########
+
+    def simulateRandomStrategy(self):
+
+        # Create Cart Pole environment
+        env2 = gym.make('CartPole-v1')
+        (currentState, _) = env2.reset()  # Initial state
+        env2.render()  # Render the environment
+
+        episodeNumber = 100  # Number of simulation episodes
+        timeSteps = 1000  # Time steps in every episode
+        sumRewardsEpisodes = []  # Sum of rewards in each episode
+
+        # Loop through each episode
+        for episodeIndex in range(episodeNumber):
+            rewardsSingleEpisode = []  # Rewards obtained in the current episode
+            initial_state = env2.reset()  # Reset the environment
+            print(episodeIndex)
+
+            # Loop through each time step
+            for timeIndex in range(timeSteps):
+                # Select a random action
+                random_action = env2.action_space.sample()
+                # Take action and observe the next state and reward
+                observation, reward, terminated, _, _ = env2.step(random_action)
+                # Collect the reward obtained in this time step
+                rewardsSingleEpisode.append(reward)
+                # Break if the episode is terminated
+                if terminated:
+                    break
+
+            # Calculate the sum of rewards obtained in this episode and append to the list
+            sumRewardsEpisodes.append(np.sum(rewardsSingleEpisode))
+
+        return sumRewardsEpisodes, env2
