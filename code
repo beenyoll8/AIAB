@@ -1,0 +1,74 @@
+import gym
+import numpy as np
+import time
+import matplotlib.pyplot as plt 
+
+# Import the Q-Learning class from the Q_Learning.ipynb notebook
+import ipynb
+from ipynb.fs.full.Q_Learning import Q_Learning
+
+# Create the CartPole environment
+env = gym.make('CartPole-v1', render_mode='human')
+(state, _) = env.reset()
+
+# Define the parameters for state discretization
+upperBounds = env.observation_space.high
+lowerBounds = env.observation_space.low
+cartVelocityMin = -3
+cartVelocityMax = 3
+poleAngularVelocityMin = -10
+poleAngularVelocityMax = 10
+upperBounds[1] = cartVelocityMax
+upperBounds[3] = poleAngularVelocityMax
+lowerBounds[1] = cartVelocityMin
+lowerBounds[3] = poleAngularVelocityMin
+
+# Define the number of bins for state discretization
+numberOfBinsPosition = 30
+numberOfBinsVelocity = 30
+numberOfBinsAngle = 30
+numberOfBinsAngularVelocity = 30
+numberOfBins = [numberOfBinsPosition, numberOfBinsVelocity, numberOfBinsAngle, numberOfBinsAngularVelocity]
+
+# Define the parameters for Q-Learning
+alpha = 0.1
+gamma = 1
+epsilon = 0.2
+numberEpisodes = 15000
+
+# Create an instance of the Q-Learning class
+Q = Q_Learning(env, alpha, gamma, epsilon, numberEpisodes, numberOfBins, lowerBounds, upperBounds)
+
+# Run the Q-Learning algorithm
+Q.simulateEpisodes()
+
+# Simulate the learned strategy
+(obtainedRewardsOptimal, env1) = Q.simulateLearnedStrategy()
+
+# Plot the convergence graph
+plt.figure(figsize=(12, 5))
+plt.plot(Q.sumRewardsEpisode, color='blue', linewidth=1)
+plt.xlabel('Episode')
+plt.ylabel('Sum of Rewards in Episode')
+plt.yscale('log')
+plt.savefig('convergence.png')
+plt.show()
+
+# Close the environment
+env1.close()
+
+# Calculate the sum of rewards obtained from the learned strategy
+np.sum(obtainedRewardsOptimal)
+
+# Simulate a random strategy
+(obtainedRewardsRandom, env2) = Q.simulateRandomStrategy()
+
+# Plot the histogram of rewards obtained from the random strategy
+plt.hist(obtainedRewardsRandom)
+plt.xlabel('Sum of rewards')
+plt.ylabel('Percentage')
+plt.savefig('histogram.png')
+plt.show()
+
+# Simulate the learned strategy again for comparison
+(obtainedRewardsOptimal, env1) = Q.simulateLearnedStrategy()
